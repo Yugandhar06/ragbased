@@ -1,0 +1,31 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements-pipeline.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements-pipeline.txt
+
+# Create necessary directories
+RUN mkdir -p /app/data /app/credentials /app/src /app/gdrive_cache
+
+# Copy source code
+COPY src/ /app/src/
+COPY pipeline.py /app/
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Health check endpoint
+EXPOSE 8000
+
+CMD ["python", "pipeline.py"]

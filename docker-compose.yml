@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # Pathway Real-Time Compliance Pipeline
+  pathway-sentinel:
+    build:
+      context: .
+      dockerfile: Dockerfile.pipeline
+    container_name: compliance-sentinel
+    environment:
+      - PATHWAY_PERSISTENT_STORAGE=/app/data/pathway_storage
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/google-credentials.json
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DB=compliance_db
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - ALERT_EMAIL=${ALERT_EMAIL}
+    volumes:
+      - ./data:/app/data
+      - ./credentials:/app/credentials:ro
+      - ./src:/app/src
+      - ./rules:/app/rules
+      - gdrive-cache:/app/gdrive_cache
+    depends_on:
+      - qdrant
+      - redis
+      - mysql
+    restart: unless-stopped
+    networks:
+      - sentinel-network
+    ports:
+      - "8000:8000"  # REST API
+      - "8001:8001"  # WebSocket for real-time alerts
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant-vectordb
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # MySQL for compliance rules and audit logs
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-compliance
+    environment:
+      - MYSQL_DATABASE=compliance_db
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and pub/sub
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Streamlit Compliance Dashboard
+  streamlit-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: compliance-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PATHWAY_API_URL=http://pathway-sentinel:8000
+      - PATHWAY_WS_URL=ws://pathway-sentinel:8001
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DB=compliance_db
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data:ro
+      - ./rules:/app/rules:ro
+    depends_on:
+      - pathway-sentinel
+      - qdrant
+      - redis
+      - mysql
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+    command: streamlit run src/dashboard.py --server.port=8501 --server.address=0.0.0.0
+
+  # Market Data Streamer (simulates real-time market feeds)
+  market-streamer:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamer
+    container_name: market-data-streamer
+    environment:
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - STREAM_INTERVAL=10
+    depends_on:
+      - redis
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+networks:
+  sentinel-network:
+    driver: bridge
+
+volumes:
+  qdrant-storage:
+  mysql-data:
+  redis-data:
+  gdrive-cache:
