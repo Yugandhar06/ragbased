@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   # Pathway Real-Time Compliance Pipeline
@@ -58,6 +58,7 @@ services:
     networks:
       - sentinel-network
     restart: unless-stopped
+    
 
   # MySQL for compliance rules and audit logs
   mysql:

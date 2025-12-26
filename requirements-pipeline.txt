@@ -1,12 +1,10 @@
-
-# Pathway Framework
-pathway[all]==0.13.0
+﻿# Pathway Framework - controls unstructured internally
+pathway[xpack-llm-docs]==0.13.0
 
 # Vector Database
 qdrant-client==1.7.3
 
-# Document Processing
-unstructured[all]==0.11.8
+# Document Processing (NO unstructured - pathway installs it)
 python-magic==0.4.27
 pypdf==3.17.4
 python-docx==1.1.0
@@ -22,7 +20,7 @@ google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
 google-api-python-client==2.116.0
 
-# Redis for streaming
+# Redis
 redis==5.0.1
 
 # MySQL
@@ -33,4 +31,3 @@ mysql-connector-python==8.2.0
 python-dotenv==1.0.1
 requests==2.31.0
 aiohttp==3.9.1
-EOF

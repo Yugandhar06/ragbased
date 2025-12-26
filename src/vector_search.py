@@ -34,14 +34,18 @@ class VectorSearch:
         )
         
         # Initialize OpenAI for embeddings
-        openai.api_key = os.getenv("OPENAI_API_KEY")
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            logger.warning("OPENAI_API_KEY not set - embeddings will fail")
         
         logger.info(f"Vector search initialized for collection: {collection_name}")
     
     def _generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for a text query"""
         try:
-            response = openai.embeddings.create(
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key)
+            response = client.embeddings.create(
                 model=self.embedding_model,
                 input=text
             )
@@ -99,13 +103,14 @@ class VectorSearch:
             
             # Format results
             results = []
-            for result in search_results:
-                results.append({
-                    "id": result.id,
-                    "text": result.payload.get("text", ""),
-                    "metadata": result.payload.get("metadata", {}),
-                    "score": result.score,
-                })
+            if search_results:
+                for result in search_results:
+                    results.append({
+                        "id": result.id,
+                        "text": result.payload.get("text", ""),
+                        "metadata": result.payload.get("metadata", {}),
+                        "score": result.score,
+                    })
             
             logger.info(f"Found {len(results)} documents for query: '{query[:50]}...'")
             
